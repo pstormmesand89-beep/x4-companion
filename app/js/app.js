@@ -3,13 +3,16 @@ import { mountShips } from "./ships-ui.js";
 import { mountCompare } from "./compare-ui.js";
 import { store } from "./util.js";
 
+// Keep in step with VERSION in sw.js; shown in the header so you can see which version runs.
+const APP_VERSION = "7";
+
 const load = (f) => fetch(`data/${f}`).then((r) => r.json());
 
 async function main() {
   const [economy, ships, equipment] = await Promise.all([
     load("economy.json"), load("ships.json"), load("equipment.json"),
   ]);
-  document.getElementById("dataver").textContent = `data v${economy.meta.gameVersion}`;
+  document.getElementById("dataver").textContent = `app ${APP_VERSION} · data v${economy.meta.gameVersion}`;
 
   const views = {
     station: document.getElementById("view-station"),
@@ -43,7 +46,16 @@ async function main() {
   show(store.get("tab", "station"));
 
   if ("serviceWorker" in navigator && location.protocol !== "file:") {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // a new version took over: reload once so the new code runs right away
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (hadController && !reloaded) {
+        reloaded = true;
+        location.reload();
+      }
+    });
+    navigator.serviceWorker.register("sw.js").then((reg) => reg.update()).catch(() => {});
   }
 }
 
