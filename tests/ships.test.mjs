@@ -38,8 +38,27 @@ test("every buyable ship gets a usable default loadout", () => {
 test("compatibility rules", () => {
   const xenon = ships.find((s) => s.race === "xenon" && s.weapons.length);
   for (const [, w] of options(eq, xenon, "weapon", xenon.weapons[0])) assert.equal(w.race, "xenon");
-  const boronL = ships.find((s) => s.race === "boron" && s.class === "l");
-  for (const [, e] of options(eq, boronL, "engine")) assert.equal(e.race, "boron");
+  // engines and shields: every ship can use every race's systems
+  const regal = ships.find((s) => /Hydra Regal/.test(s.name)) || ships.find((s) => s.race === "boron" && s.class === "l");
+  const engRaces = new Set(options(eq, regal, "engine").map(([, e]) => e.race));
+  assert.ok(engRaces.has("split") && engRaces.has("boron"), `engine races for ${regal.name}: ${[...engRaces]}`);
+  const shRaces = new Set(options(eq, regal, "shield").map(([, e]) => e.race));
+  assert.ok(shRaces.size > 1, `shield races for ${regal.name}: ${[...shRaces]}`);
+  // ...except Xenon and Kha'ak items: not buildable, so not for player ships (and they keep their own)
+  for (const r of [...engRaces, ...shRaces]) assert.ok(r !== "xenon" && r !== "khaak", `${regal.name} got ${r} system`);
+  const xen = ships.find((s) => s.race === "xenon");
+  for (const [, e] of options(eq, xen, "engine")) assert.equal(e.race, "xenon");
+  // weapons/turrets: same rule (Boron L/XL no longer limited to Boron weapons)
+  const turretSlot = (s) => s.turrets.find((t) => !t.launcher) ||
+    (s.turretGroups.find((g) => g.turretCount && !g.launcher) && { size: s.turretGroups.find((g) => g.turretCount && !g.launcher).turretSize });
+  const boronL = ships.find((s) => s.race === "boron" && s.class === "l" && turretSlot(s));
+  const tRaces = new Set(options(eq, boronL, "turret", turretSlot(boronL)).map(([, t]) => t.race));
+  assert.ok(tRaces.has("boron") && tRaces.has("argon"), `turret races for ${boronL.name}: ${[...tRaces]}`);
+  assert.ok(!tRaces.has("xenon") && !tRaces.has("khaak"));
+  const argonL = ships.find((s) => s.race === "argon" && s.class === "l" && turretSlot(s));
+  const aRaces = new Set(options(eq, argonL, "turret", turretSlot(argonL)).map(([, t]) => t.race));
+  assert.ok(aRaces.has("boron"), `turret races for ${argonL.name}: ${[...aRaces]}`);
+  for (const [, e] of options(eq, regal, "engine")) assert.equal(e.class, regal.class);
   const argonM = ships.find((s) => s.race === "argon" && s.class === "m" && s.weapons.length);
   const opts = options(eq, argonM, "weapon", argonM.weapons.find((w) => !w.launcher));
   assert.ok(opts.length > 5);
@@ -70,6 +89,28 @@ test("roles pick what players expect", () => {
   const ac = bestLoadout(eq, behemoth, "anticap");
   const kinds = ac.groups.map((g, i) => behemoth.turretGroups[i].launcher && g.turret && missileKind(eq.turrets[g.turret])).filter(Boolean);
   kinds.forEach((k) => assert.equal(k, "torpedo"));
+});
+
+test("anti-capital: no travel engines, no ion/flak, heavy weapons", () => {
+  for (const s of ships.filter((x) => x.price > 0 && x.race !== "xenon" && x.race !== "khaak" && x.engineCount)) {
+    const lo = bestLoadout(eq, s, "anticap");
+    if (lo.engine) assert.doesNotMatch(eq.engines[lo.engine].name, /Travel/, `${s.name}: travel engine`);
+    for (const id of lo.weapons.filter(Boolean)) assert.doesNotMatch(eq.weapons[id].name, /Ion|Flak/, `${s.name}: ${eq.weapons[id].name}`);
+  }
+  const behemoth = ships.find((s) => s.name === "Behemoth Vanguard");
+  const main = bestLoadout(eq, behemoth, "anticap").weapons.filter(Boolean).map((id) => eq.weapons[id].name);
+  assert.deepEqual([...new Set(main)], ["ARG Behemoth Main Battery"]);
+  const regal = ships.find((s) => s.name === "Hydra Regal");
+  const lo = bestLoadout(eq, regal, "anticap");
+  const w = eq.weapons[lo.weapons.find((id) => id && !/Launcher/.test(eq.weapons[id].name))];
+  assert.ok(["heavy", "highpower"].includes(w.group), `Hydra Regal anticap weapon: ${w.name}`);
+});
+
+test("sustained DPS never exceeds burst DPS", () => {
+  for (const s of ships.filter((x) => x.price > 0)) {
+    const st = stats(eq, s, bestLoadout(eq, s, "piracy"));
+    assert.ok(st.sustainedDps <= st.burstDps + 0.1, `${s.name}: ${st.sustainedDps} > ${st.burstDps}`);
+  }
 });
 
 test("expected results are sane", () => {

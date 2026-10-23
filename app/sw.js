@@ -1,5 +1,5 @@
 // Offline cache. Bump VERSION whenever app files or data change.
-const VERSION = "x4c-v2";
+const VERSION = "x4c-v6";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "js/app.js", "js/util.js", "js/production.js", "js/ships.js",

@@ -3,21 +3,19 @@
 
 const RESTRICTED_RACES = ["xenon", "khaak"];
 
-// Weapons/turrets: Xenon & Kha'ak only use their own; Boron L/XL ships only fit Boron weapons
-// (and Boron weapons only fit Boron ships at L/XL).
+// Weapons/turrets: every buildable ship can use every buildable race's weapons (also Boron at L/XL).
+// Exception: Xenon and Kha'ak weapons are not available to players, and their ships use only their own.
 function weaponRaceOk(ship, item) {
   for (const r of RESTRICTED_RACES) {
     if ((ship.race === r) !== (item.race === r)) return false;
   }
-  if (ship.class === "l" || ship.class === "xl") {
-    if ((ship.race === "boron") !== (item.race === "boron")) return false;
-  }
   return true;
 }
 
-// Shields/engines: Boron, Xenon and Kha'ak use only their own and nobody else uses theirs.
+// Shields/engines: every buildable ship can use every buildable race's systems (e.g. a Boron Hydra Regal with
+// Split engines). Exception: Xenon and Kha'ak systems are not available to players, and their ships use only their own.
 function systemRaceOk(ship, item) {
-  for (const r of ["boron", ...RESTRICTED_RACES]) {
+  for (const r of RESTRICTED_RACES) {
     if ((ship.race === r) !== (item.race === r)) return false;
   }
   return true;
@@ -27,12 +25,17 @@ const byMkThenName = (a, b) => (b[1].mk || 0) - (a[1].mk || 0) || a[1].name.loca
 
 const isMissile = (w) => w.type === "missilelauncher" || w.type === "missileturret";
 
+// Sustained DPS can never exceed burst DPS; a few community values do (all Ion Blasters 905.2), so cap it.
+const sustained = (w) => Math.min(w.sustainedDps || w.burstDps, w.burstDps);
+
 // Equipment named after one ship (Envoy engines, Behemoth Main Battery, …) only fits that ship.
 const SHIP_SPECIFIC = /\b(Envoy|Astrid|Erlking|Behemoth|Hyperion|Odysseus|Phoenix|Rattlesnake|Sapporo|Obliterator|Ravager|Ray Ion)\b/;
 function fitsShip(ship, item) {
   const m = item.name.match(SHIP_SPECIFIC);
   if (m && !ship.name.includes(m[1].split(" ")[0])) return false;
   if (/\(Racer\)/.test(item.name) && ship.role !== "racing") return false;
+  // main batteries are built into their ship type: never across races
+  if (item.group === "capital" && item.race !== ship.race) return false;
   return true;
 }
 
@@ -155,9 +158,9 @@ export function stats(eq, ship, lo) {
       return;
     }
     s.burstDps += w.burstDps * count;
-    s.sustainedDps += (w.sustainedDps || w.burstDps) * count;
+    s.sustainedDps += sustained(w) * count;
     // capital main batteries cannot track S/M ships
-    if (w.group !== "capital") s.antiSmallDps += (w.sustainedDps || w.burstDps) * count;
+    if (w.group !== "capital") s.antiSmallDps += sustained(w) * count;
     guns.push(w);
   };
   ship.weapons.forEach((slot, i) => {
@@ -279,14 +282,16 @@ export const ROLES = [
     why: [
       "Tegen L/XL-schepen telt pure schade op afstand: zware wapens en turrets (plasma, main batteries) met groot bereik.",
       "Torpedo-werpers voor maximale schade per salvo tegen grote, trage doelen.",
-      "All-round motoren: genoeg snelheid om te positioneren zonder in te leveren op stuwkracht.",
+      "All-round of combat-motoren (geen travel): je vecht in normale vlucht, dus stuwkracht en boost tellen.",
+      "Geen ion-wapens: die richten zich op schilden; tegen grote schepen wil je rompschade.",
       "Schilden met de hoogste capaciteit: grote schepen doen veel schade per treffer.",
     ],
-    engine: (e) => e.thrust.forward * (1 + 0.2 * e.travel.thrust) * (engineKind(e) === "allround" ? 1.1 : 1),
+    // no travel engines: you fight in normal flight, thrust and boost matter
+    engine: (e) => (engineKind(e) === "travel" ? -1 : e.thrust.forward * (1 + 0.3 * e.boost.thrust) * (engineKind(e) === "allround" ? 1.1 : 1)),
     shield: (s) => s.capacity + 10 * s.recharge,
     thruster: (t) => t.yaw + t.pitch,
-    weapon: (w) => (isTool(w) ? -1 : (w.sustainedDps || w.burstDps) * (1 + w.range / 10)),
-    turret: (w) => (isTool(w) ? -1 : (w.sustainedDps || w.burstDps) * (1 + w.range / 10)),
+    weapon: (w) => antiCapScore(w),
+    turret: (w) => antiCapScore(w),
     missile: "torpedo",
   },
   {
@@ -333,6 +338,13 @@ export const ROLES = [
     missile: "tracking",
   },
 ];
+
+// Anti-capital: hull damage at range. Ion weapons mostly hit shields, flak and tools are pointless here.
+function antiCapScore(w) {
+  if (isTool(w) || /ion/i.test(w.name) || /flak/i.test(w.name)) return -1;
+  const heavy = ["heavy", "highpower", "capital"].includes(w.group) ? 1.25 : 1;
+  return sustained(w) * (1 + w.range / 10) * heavy;
+}
 
 // Best loadout for a role: per slot the option with the highest role score.
 export function bestLoadout(eq, ship, roleKey) {
