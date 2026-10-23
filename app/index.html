@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>X4 Companion</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>X4 Companion</h1>
+    <span class="ver" id="dataver"></span>
+  </header>
+
+  <main>
+    <section id="view-station" class="view"></section>
+    <section id="view-ships" class="view" hidden></section>
+    <section id="view-compare" class="view" hidden></section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="station" class="active"><span class="ico">⬢</span>Station</button>
+    <button data-view="ships"><span class="ico">✈</span>Schepen</button>
+    <button data-view="compare"><span class="ico">⇆</span>Vergelijk <b id="cmpcount"></b></button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
